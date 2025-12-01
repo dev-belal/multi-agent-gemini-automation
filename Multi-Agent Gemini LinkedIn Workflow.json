@@ -1,0 +1,389 @@
+{
+  "name": "Multi-Agent Gemini LinkedIn Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        192
+      ],
+      "id": "49feafbc-0db2-4ab7-bcdd-39d7ff3e7fbb",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $node['Agent B HTTP Request'].json;\nlet text = res?.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\n// Remove Markdown code fences (```json ... ``` or ``` ... ```)\ntext = text.replace(/```(json)?\\n?/g, '').replace(/```$/, '').trim();\n\n// Try to parse JSON safely\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (err) {\n  parsed = {\n    critique: 'Parsing failed or invalid JSON',\n    final_post: text || 'No output'\n  };\n}\n\n// Get token usage\nconst usageA = $('Prepare Agent B Prompt').first().json.usageA || 0;\nconst usageB = res?.usageMetadata?.totalTokenCount || 0;\n\n// Total tokens\nconst totalTokens = usageA + usageB;\n\n// Estimated cost (Gemini pricing: $0.0005 per 1K tokens)\nconst costPerThousandTokens = 0.0005;\nconst estimatedCost = (totalTokens / 1000) * costPerThousandTokens;\n\nreturn {\n  json: {\n    topic: $json.topic,\n    draft: $json.draft,\n    final_post: parsed.final_post,\n    critique: parsed.critique,\n    usageA,\n    usageB,\n    totalTokens,\n    estimatedCost: Number(estimatedCost.toFixed(6)), // Round to 6 decimals\n    timestamp: new Date().toISOString(),\n    status: 'success'\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        176
+      ],
+      "id": "c420d03e-b7a7-4a55-a755-2520239e805e",
+      "name": "Process Agent B Response",
+      "alwaysOutputData": false,
+      "retryOnFail": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d3e73fa0-21d2-4dc3-80d2-fe30c6f08dab",
+              "name": "agent_a_prompt",
+              "value": "You are a professional LinkedIn content writer.   Your task is to draft a high-quality LinkedIn post based on the given topic. Follow these guidelines:  1. Length: 150–200 words.   2. Tone: Professional, engaging, and authoritative.   3. Structure:      - Begin with a strong opening line that hooks the reader.      - Provide 2–3 concise points illustrating key insights.      - Conclude with a thought-provoking question or call to action.   4. Language: Avoid buzzwords, clichés, or vague phrases. Use clear, precise, and actionable language.   5. Style: Keep sentences concise. Use active voice. Avoid filler words.   6. Context: Focus on real-world relevance, impact, and value for business professionals.    Here is the topic: \"The future of AI Agents in Business\"  Write the LinkedIn post based strictly on the above instructions.",
+              "type": "string"
+            },
+            {
+              "id": "f786cc61-7fe0-40a5-b66f-5e7a6abced4b",
+              "name": "topic",
+              "value": "The future of AI Agents in Business",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -752,
+        192
+      ],
+      "id": "2c0ef77f-91d8-49b3-97ed-199917a38780",
+      "name": "set Agent A Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyBGFhFRlNeYirqS7GiIupCVAzMxiUjoiBI",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ {\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\": $json.agent_b_prompt}]}] } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        304,
+        176
+      ],
+      "id": "7629b52a-8682-4ce5-b98f-35eb7be040bf",
+      "name": "Agent B HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const draft = $node['Agent A HTTP Request'].json.candidates[0].content.parts[0].text;\nconst usageA = $node['Agent A HTTP Request'].json.usageMetadata.totalTokenCount;\n\nreturn {\n  json: {\n    topic: $json.topic,\n    draft: draft,\n    usageA: usageA,\n    agent_b_prompt: `You are a professional editor and content strategist with a sharp eye for clarity and impact.\\n\\nYour role is to critique and refine the draft written by Agent A. Follow these instructions strictly:\\n1. Critique: Identify any unclear phrases, corporate jargon, buzzwords, or vague statements. Highlight areas that could be more direct and actionable.\\n2. Refine: Rewrite the post to make it more concise, punchy, and professional. Preserve meaning, enhance clarity, and improve reader engagement.\\n3. Tone: Ensure the final version is authoritative, polished, and suitable for LinkedIn's professional audience.\\n4. Structure: Keep the post between 150–200 words, maintain logical flow, and add a strong closing or call to action if missing.\\n5. Output: Return strictly in JSON format ONLY, like this:\\n{\\n  \\\"critique\\\": \\\"...\\\",\\n  \\\"final_post\\\": \\\"...\\\"\\n}\\nDo NOT include any extra text, Markdown code fences, or explanations outside the JSON.\\n\\nHere is the draft from Agent A:\\n${draft}`\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        176
+      ],
+      "id": "7f2b099f-f397-4d44-bb06-8a9a788feadb",
+      "name": "Prepare Agent B Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyBGFhFRlNeYirqS7GiIupCVAzMxiUjoiBI",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ {\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\": $json.agent_a_prompt}]}] } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -560,
+        192
+      ],
+      "id": "ecebc621-b1ea-475d-afa2-54d4a927b0bd",
+      "name": "Agent A HTTP Request"
+    },
+    {
+      "parameters": {
+        "content": "***As there was no instruction about the input of Topic. I have added it as static.***\n",
+        "height": 80,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -832,
+        96
+      ],
+      "typeVersion": 1,
+      "id": "a1c3d7e6-86e7-463f-b865-e3c0feafd972",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1_00Mk9i_TbNJc7c2LtDT5P6hPSXBW4B0fBIW6GPn_Vg",
+          "mode": "list",
+          "cachedResultName": "Lillia Assesment Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1_00Mk9i_TbNJc7c2LtDT5P6hPSXBW4B0fBIW6GPn_Vg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1_00Mk9i_TbNJc7c2LtDT5P6hPSXBW4B0fBIW6GPn_Vg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $json.timestamp }}",
+            "Original Topic": "={{ $('set Agent A Prompt').item.json.topic }}",
+            "Draft (Agent A)": "={{ $('Prepare Agent B Prompt').item.json.draft }}",
+            "Final Version (Agent B)": "={{ $json.final_post }}",
+            "Total Tokens Used": "={{ $json.totalTokens }}",
+            "Estimated Cost": "={{ $json.estimatedCost }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Original Topic",
+              "displayName": "Original Topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Draft (Agent A)",
+              "displayName": "Draft (Agent A)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Final Version (Agent B)",
+              "displayName": "Final Version (Agent B)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total Tokens Used",
+              "displayName": "Total Tokens Used",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estimated Cost",
+              "displayName": "Estimated Cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        688,
+        176
+      ],
+      "id": "c325c4b0-24ba-4131-9151-e4f691eb929a",
+      "name": "Adding to the Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1aOBe7gpAQEZqTzW",
+          "name": "Google Sheets - Syed Bilal"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const draft = $node['Agent A HTTP Request'].json.candidates[0].content.parts[0].text || '';\n\n// Define max length in words (e.g., 200)\nconst maxWords = 200;\nconst wordCount = draft.split(/\\s+/).length;\n\n// Check for hallucination by simple heuristics\nconst forbiddenPhrases = [\"as an AI language model\", \"cannot predict\", \"in this new era\", \"visionary insights\"];\nconst hallucinates = forbiddenPhrases.some(p => draft.includes(p));\n\nif (!draft || wordCount > maxWords || hallucinates) {\n  return {\n    json: {\n      topic: $('set Agent A Prompt').first().json.topic,\n      draft: draft || 'Draft unavailable',\n      validDraft: false,\n      reason: !draft ? 'Empty draft' : hallucinates ? 'Hallucination detected' : 'Too long'\n    }\n  };\n} else {\n  return {\n    json: {\n      topic: $('set Agent A Prompt').first().json.topic,\n      draft,\n      validDraft: true\n    }\n  };\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        192
+      ],
+      "id": "3944c597-87a2-45f2-9881-f10a04615d6f",
+      "name": "Draft Validation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "91a39b1a-c447-4e3a-ad13-30f821c2e520",
+              "leftValue": "={{ $json.validDraft }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -144,
+        192
+      ],
+      "id": "36719192-dfc8-400d-98ba-2e8e9c144b68",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "set Agent A Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Agent B Response": {
+      "main": [
+        [
+          {
+            "node": "Adding to the Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set Agent A Prompt": {
+      "main": [
+        [
+          {
+            "node": "Agent A HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent B HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Process Agent B Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Agent B Prompt": {
+      "main": [
+        [
+          {
+            "node": "Agent B HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent A HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Draft Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Validation": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Prepare Agent B Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Agent A HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "97cbbc9c-b221-4ee4-b35a-cfeaea6f491a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4965c3645088b5563ae7ef0355e254428095159089b6c7a8bff097eea4f79a95"
+  },
+  "id": "Ff9VUuoGEt8ChrjA",
+  "tags": []
+}
