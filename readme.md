@@ -16,6 +16,5 @@ The workflow also performs:
 ---
 
 ## 📸 Workflow Diagram
-
-```md
 ![Workflow Diagram](./workflow.png)
+
