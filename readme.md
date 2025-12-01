@@ -18,3 +18,33 @@ The workflow also performs:
 ## 📸 Workflow Diagram
 ![Workflow Diagram](./workflow.png)
 
+---
+
+## 🚀 Features
+### 🧠 1. Multi-Agent AI Content Pipeline
+This workflow implements a **two-agent architecture**:
+- **Agent A (Writer)** generates a structured draft (150–200 words)
+- **Agent B (Editor)** evaluates clarity, tone, jargon, and readability — then rewrites the post
+- The editor returns output **strictly in JSON format**, enforced by prompt constraints
+
+---
+
+### 🛑 2. Draft Validation & Hallucination Detection
+Before sending the draft to Agent B, the workflow validates:
+- Draft exists
+- Draft ≤ 200 words
+- No banned phrases like ```"as an AI language model"```
+- No generic hallucinations
+If validation fails → Agent A regenerates until a valid draft is produced.
+
+---
+
+### 🧮 3. Token + Cost Tracking
+The workflow extracts:
+- **Agent A token usage**
+- **Agent B token usage**
+- **Total tokens**
+- **Estimated cost** using rate:
+  ```bash
+  $0.0005 per 1,000 tokens
+```
